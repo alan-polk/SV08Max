@@ -22,7 +22,8 @@ Working repo for a Sovol SV08 Max (Klipper). Holds config/macro backups, notes f
 - MCUs: main `stm32h750xx` fw `aeb4421-dirty-20250402`; `extra_mcu` `stm32f103xe` fw `cc8afd8-dirty-20250310`. Host is a CAN bridge (CANBUS_BRIDGE).
 - Moonraker update manager is not configured (`/machine/update/status` 404) – updates are Sovol-OTA/manual only.
 
-## OS update assessment
-- `apt-get update` was run (package lists only; **no upgrades installed**). 123 packages upgradable, all from `bullseye-security` (libc, curl, gnutls, git, glib, gnupg, avahi, bind9 libs, etc.). No kernel/Armbian/Sovol packages are in the list (only `linux-libc-dev` headers), so security updates should not touch the kernel/boot.
-- Debian 11 is past regular support (LTS only, apt calls it `oldoldstable`). `bullseye-backports` repo is dead (`apt-get update` errors on it) – remove/comment that line in sources.
-- Recommendation: after this backup, `sudo apt-get upgrade` (not `dist-upgrade`/`full-upgrade`) is low risk; reboot afterwards. Do not do a release upgrade – the image is vendor-customised.
+## OS update log
+- **2026-10-05:** `apt-get upgrade` applied (123 security packages: libc, sudo, curl, gnutls, git, polkit, wpa_supplicant, etc.), then rebooted. Kernel unchanged (5.16.17-sun50iw9); Klipper, Moonraker, nginx, KlipperScreen, crowsnest all came back `active`, printer `ready`, 0 failed units, 0 upgradable.
+- **Debian 11 LTS has ended** (Aug 2026). Security packages now 404 on `deb.debian.org/debian-security`; they live on `archive.debian.org/debian-security`. `/etc/apt/sources.list` was changed accordingly (`bullseye-backports` commented out, security line -> archive.debian.org; original saved as `/etc/apt/sources.list.bak-20261005` on the printer; current copy in `backup/2026-10-05/system/sources.list.after-upgrade`). Expect **no further security updates** – the OS is effectively frozen. Do not attempt a release upgrade (vendor-customised image); rely on network isolation instead.
+- Harmless warning during upgrade: `ln: failed to create hard link /boot/initrd.img-...dpkg-bak` because `/boot` is FAT. initrd/uInitrd regenerated fine.
+- Still TODO: change default `sovol` password, add SSH key auth.
