@@ -1,0 +1,5 @@
+.DS_Store
+# contains Moonraker API key / password hashes - never commit
+*.db
+moonraker-sql.db
+logs/

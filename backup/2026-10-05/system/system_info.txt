@@ -1,0 +1,887 @@
+##### /etc/rc.local
+#!/bin/sh -e
+#
+# rc.local
+#
+# This script is executed at the end of each multiuser runlevel.
+# Make sure that the script will "ex-it 0" on success or any other
+# value on error.
+#
+# In order to enable or disable this script just change the execution
+# bits.
+#
+# By default this script does nothing.
+
+chmod +x /boot/scripts/*
+/boot/scripts/btt_init.sh
+
+exit 0
+##### /etc/fstab
+UUID=816d4ba5-78b9-416d-b896-15f2f7750334 / ext4 defaults,noatime,commit=600,errors=remount-ro 0 1
+UUID=0E35-1C8E /boot vfat defaults 0 2
+tmpfs /tmp tmpfs defaults,nosuid,size=1G 0 0
+##### /etc/apt/sources.list
+deb http://deb.debian.org/debian bullseye main contrib non-free
+#deb-src http://deb.debian.org/debian bullseye main contrib non-free
+
+deb http://deb.debian.org/debian bullseye-updates main contrib non-free
+#deb-src http://deb.debian.org/debian bullseye-updates main contrib non-free
+
+deb http://deb.debian.org/debian bullseye-backports main contrib non-free
+#deb-src http://deb.debian.org/debian bullseye-backports main contrib non-free
+
+deb http://deb.debian.org/debian-security bullseye-security main contrib non-free
+#deb-src http://deb.debian.org/debian-security bullseye-security main contrib non-free
+##### /etc/os-release
+PRETTY_NAME="SPI-XI 2.3.3 Bullseye"
+NAME="Debian GNU/Linux"
+VERSION_ID="11"
+VERSION="11 (bullseye)"
+VERSION_CODENAME=bullseye
+ID=debian
+HOME_URL="https://www.debian.org/"
+SUPPORT_URL="https://www.debian.org/support"
+BUG_REPORT_URL="https://bugs.debian.org/"
+##### sources.list.d
+##### nginx
+# /etc/nginx/conf.d/common_vars.conf
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    '' close;
+}# /etc/nginx/conf.d/upstreams.conf
+upstream apiserver {
+    ip_hash;
+    server 127.0.0.1:7125;
+}
+
+upstream mjpgstreamer1 {
+    ip_hash;
+    server 127.0.0.1:8080;
+}
+
+upstream mjpgstreamer2 {
+    ip_hash;
+    server 127.0.0.1:8081;
+}
+
+upstream mjpgstreamer3 {
+    ip_hash;
+    server 127.0.0.1:8082;
+}
+
+upstream mjpgstreamer4 {
+    ip_hash;
+    server 127.0.0.1:8083;
+}##### klipper.service
+[Unit]
+Description=Klipper 3D Printer Firmware SV1
+Documentation=https://www.klipper3d.org/
+After=network-online.target
+Wants=udev.target
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=simple
+User=sovol
+RemainAfterExit=yes
+WorkingDirectory=/home/sovol/klipper
+EnvironmentFile=/home/sovol/printer_data/systemd/klipper.env
+ExecStart=/home/sovol/klippy-env/bin/python $KLIPPER_ARGS
+Restart=always
+RestartSec=10
+##### moonraker.service
+[Unit]
+Description=API Server for Klipper SV1
+Documentation=https://moonraker.readthedocs.io/
+Requires=network-online.target
+After=network-online.target
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=simple
+User=sovol
+SupplementaryGroups=moonraker-admin
+RemainAfterExit=yes
+WorkingDirectory=/home/sovol/moonraker
+EnvironmentFile=/home/sovol/printer_data/systemd/moonraker.env
+ExecStart=/home/sovol/moonraker-env/bin/python $MOONRAKER_ARGS
+Restart=always
+RestartSec=10##### KlipperScreen.service
+[Unit]
+Description=KlipperScreen
+StartLimitIntervalSec=0
+# Make sure we are started after logins are permitted. If Plymouth is
+# used, we want to start when it is on its way out.
+After=systemd-user-sessions.service plymouth-quit-wait.service
+# On systems without virtual consoles, do not start.
+ConditionPathExists=/dev/tty0
+# D-Bus is necessary for contacting logind, which is required.
+Wants=dbus.socket systemd-logind.service
+After=dbus.socket systemd-logind.service
+After=moonraker.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=2
+User=sovol
+SupplementaryGroups=klipperscreen
+WorkingDirectory=/home/sovol/KlipperScreen
+Environment="KS_XCLIENT=/home/sovol/.KlipperScreen-env/bin/python /home/sovol/KlipperScreen/screen.py" BACKEND=X
+ExecStart="/home/sovol/KlipperScreen/scripts/KlipperScreen-start.sh"
+
+# Log this user with utmp, letting it show up with commands 'w' and
+# 'who'. This is needed since we replace (a)getty.
+UtmpIdentifier=tty7
+UtmpMode=user
+# A virtual terminal is needed.
+TTYPath=/dev/tty7
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+
+[Install]
+WantedBy=multi-user.target
+##### crowsnest.service
+#### crowsnest - A webcam Service for multiple Cams and Stream Services.
+####
+#### Written by Stephan Wendel aka KwadFan <me@stephanwe.de>
+#### Copyright 2021 - 2022
+#### https://github.com/mainsail-crew/crowsnest
+####
+#### This File is distributed under GPLv3
+####
+
+[Unit]
+Description=crowsnest - Multi Webcam/Streamer Control Deamon
+Documentation=https://github.com/mainsail-crew/crowsnest
+After=network-online.target systemd-udev-settle.service moonraker.service
+Requires=network-online.target systemd-udev-settle.service moonraker.service
+#Wants=udev.service network-online.target
+Before=nginx.service
+StartLimitBurst=10
+StartLimitIntervalSec=180
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=simple
+User=sovol
+#RemainAfterExit=Yes
+WorkingDirectory=/home/sovol/crowsnest
+EnvironmentFile=/home/sovol/printer_data/systemd/crowsnest.env
+ExecStart=/usr/local/bin/crowsnest $CROWSNEST_ARGS
+#Restart=on-failure
+Restart=always
+RestartSec=5
+##### moonraker-obico.service
+#Systemd service file for moonraker-obico
+[Unit]
+Description=Moonraker-Obico
+After=network-online.target moonraker.service
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=simple
+User=sovol
+WorkingDirectory=/home/sovol/moonraker-obico
+ExecStart=/home/sovol/moonraker-obico/../moonraker-obico-env/bin/python3 -m moonraker_obico.app -c /home/sovol/printer_data/config/moonraker-obico.cfg
+Restart=always
+RestartSec=5
+##### makerbase-client.service
+[Unit]
+Description=Run start.sh at boot
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/sovol/zhongchuang/build/start.sh
+WorkingDirectory=/home/sovol/zhongchuang/build
+User=root
+
+# 保持重启策略
+Restart=always
+RestartSec=5s
+
+# 让 systemd 收集 stdout 和 stderr 到 journal
+StandardOutput=journal
+StandardError=journal
+
+# 允许生成 core dump，大小无限制
+LimitCORE=infinity
+
+# 设置环境变量，方便core dump文件生成和调试（可选）
+Environment="LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libSegFault.so"
+
+[Install]
+WantedBy=multi-user.target
+
+##### wifi_server.service
+[Unit]
+Description=WiFi Server Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/bin/wifi_server.py
+Restart=always
+User=root
+WorkingDirectory=/usr/local/bin
+
+[Install]
+WantedBy=multi-user.target
+
+##### upgradable count
+123
+##### upgradable kernel-ish
+linux-libc-dev/oldoldstable-security 5.10.262-1 arm64 [upgradable from: 5.10.223-1]
+##### upgradable full
+Listing...
+avahi-autoipd/oldoldstable-security 0.8-5+deb11u3 arm64 [upgradable from: 0.8-5+deb11u2]
+avahi-daemon/oldoldstable-security 0.8-5+deb11u3 arm64 [upgradable from: 0.8-5+deb11u2]
+bind9-dnsutils/oldoldstable-security 1:9.16.50-1~deb11u6 arm64 [upgradable from: 1:9.16.50-1~deb11u2]
+bind9-host/oldoldstable-security 1:9.16.50-1~deb11u6 arm64 [upgradable from: 1:9.16.50-1~deb11u2]
+bind9-libs/oldoldstable-security 1:9.16.50-1~deb11u6 arm64 [upgradable from: 1:9.16.50-1~deb11u2]
+ca-certificates/oldoldstable-security,oldoldstable-security 20250419~deb12u1~deb11u1 all [upgradable from: 20210119]
+curl/oldoldstable-security 7.74.0-1.3+deb11u16 arm64 [upgradable from: 7.74.0-1.3+deb11u13]
+dirmngr/oldoldstable-security 2.2.27-2+deb11u3 arm64 [upgradable from: 2.2.27-2+deb11u2]
+distro-info-data/oldoldstable-security,oldoldstable-security 0.51+deb11u11 all [upgradable from: 0.51+deb11u6]
+dnsutils/oldoldstable-security,oldoldstable-security 1:9.16.50-1~deb11u6 all [upgradable from: 1:9.16.50-1~deb11u2]
+dpkg-dev/oldoldstable-security,oldoldstable-security 1.20.14 all [upgradable from: 1.20.13]
+dpkg/oldoldstable-security 1.20.14 arm64 [upgradable from: 1.20.13]
+e2fsprogs/oldoldstable-security 1.46.2-2+deb11u1 arm64 [upgradable from: 1.46.2-2]
+gir1.2-packagekitglib-1.0/oldoldstable-security 1.2.2-2+deb11u1 arm64 [upgradable from: 1.2.2-2]
+git-man/oldoldstable-security,oldoldstable-security 1:2.30.2-1+deb11u5 all [upgradable from: 1:2.30.2-1+deb11u2]
+git/oldoldstable-security 1:2.30.2-1+deb11u5 arm64 [upgradable from: 1:2.30.2-1+deb11u2]
+gnupg-l10n/oldoldstable-security,oldoldstable-security 2.2.27-2+deb11u3 all [upgradable from: 2.2.27-2+deb11u2]
+gnupg-utils/oldoldstable-security 2.2.27-2+deb11u3 arm64 [upgradable from: 2.2.27-2+deb11u2]
+gnupg2/oldoldstable-security,oldoldstable-security 2.2.27-2+deb11u3 all [upgradable from: 2.2.27-2+deb11u2]
+gnupg/oldoldstable-security,oldoldstable-security 2.2.27-2+deb11u3 all [upgradable from: 2.2.27-2+deb11u2]
+gpg-agent/oldoldstable-security 2.2.27-2+deb11u3 arm64 [upgradable from: 2.2.27-2+deb11u2]
+gpg-wks-client/oldoldstable-security 2.2.27-2+deb11u3 arm64 [upgradable from: 2.2.27-2+deb11u2]
+gpg-wks-server/oldoldstable-security 2.2.27-2+deb11u3 arm64 [upgradable from: 2.2.27-2+deb11u2]
+gpg/oldoldstable-security 2.2.27-2+deb11u3 arm64 [upgradable from: 2.2.27-2+deb11u2]
+gpgconf/oldoldstable-security 2.2.27-2+deb11u3 arm64 [upgradable from: 2.2.27-2+deb11u2]
+gpgsm/oldoldstable-security 2.2.27-2+deb11u3 arm64 [upgradable from: 2.2.27-2+deb11u2]
+gpgv/oldoldstable-security 2.2.27-2+deb11u3 arm64 [upgradable from: 2.2.27-2+deb11u2]
+iperf3/oldoldstable-security 3.9-1+deb11u3 arm64 [upgradable from: 3.9-1+deb11u1]
+jq/oldoldstable-security 1.6-2.1+deb11u3 arm64 [upgradable from: 1.6-2.1]
+libasound2-data/oldoldstable-security,oldoldstable-security 1.2.4-1.1+deb11u1 all [upgradable from: 1.2.4-1.1]
+libasound2/oldoldstable-security 1.2.4-1.1+deb11u1 arm64 [upgradable from: 1.2.4-1.1]
+libatopology2/oldoldstable-security 1.2.4-1.1+deb11u1 arm64 [upgradable from: 1.2.4-1.1]
+libavahi-common-data/oldoldstable-security 0.8-5+deb11u3 arm64 [upgradable from: 0.8-5+deb11u2]
+libavahi-common3/oldoldstable-security 0.8-5+deb11u3 arm64 [upgradable from: 0.8-5+deb11u2]
+libavahi-core7/oldoldstable-security 0.8-5+deb11u3 arm64 [upgradable from: 0.8-5+deb11u2]
+libbluetooth3/oldoldstable-security 5.55-3.1+deb11u2 arm64 [upgradable from: 5.55-3.1+deb11u1]
+libbpf0/oldoldstable-security 1:0.3-2+deb11u1 arm64 [upgradable from: 1:0.3-2]
+libc-bin/oldoldstable-security 2.31-13+deb11u14 arm64 [upgradable from: 2.31-13+deb11u11]
+libc-dev-bin/oldoldstable-security 2.31-13+deb11u14 arm64 [upgradable from: 2.31-13+deb11u11]
+libc-l10n/oldoldstable-security,oldoldstable-security 2.31-13+deb11u14 all [upgradable from: 2.31-13+deb11u11]
+libc6-dev/oldoldstable-security 2.31-13+deb11u14 arm64 [upgradable from: 2.31-13+deb11u11]
+libc6/oldoldstable-security 2.31-13+deb11u14 arm64 [upgradable from: 2.31-13+deb11u11]
+libcaca0/oldoldstable-security 0.99.beta19-2.2+deb11u1 arm64 [upgradable from: 0.99.beta19-2.2]
+libcap2-bin/oldoldstable-security 1:2.44-1+deb11u1 arm64 [upgradable from: 1:2.44-1]
+libcap2/oldoldstable-security 1:2.44-1+deb11u1 arm64 [upgradable from: 1:2.44-1]
+libcom-err2/oldoldstable-security 1.46.2-2+deb11u1 arm64 [upgradable from: 1.46.2-2]
+libcurl3-gnutls/oldoldstable-security 7.74.0-1.3+deb11u16 arm64 [upgradable from: 7.74.0-1.3+deb11u13]
+libcurl4/oldoldstable-security 7.74.0-1.3+deb11u16 arm64 [upgradable from: 7.74.0-1.3+deb11u13]
+libdpkg-perl/oldoldstable-security,oldoldstable-security 1.20.14 all [upgradable from: 1.20.13]
+libexpat1/oldoldstable-security 2.2.10-2+deb11u7 arm64 [upgradable from: 2.2.10-2+deb11u5]
+libext2fs2/oldoldstable-security 1.46.2-2+deb11u1 arm64 [upgradable from: 1.46.2-2]
+libfreetype6/oldoldstable-security 2.10.4+dfsg-1+deb11u2 arm64 [upgradable from: 2.10.4+dfsg-1+deb11u1]
+libglib2.0-0/oldoldstable-security 2.66.8-1+deb11u8 arm64 [upgradable from: 2.66.8-1+deb11u4]
+libgnutls30/oldoldstable-security 3.7.1-5+deb11u10 arm64 [upgradable from: 3.7.1-5+deb11u5]
+libgssapi-krb5-2/oldoldstable-security 1.18.3-6+deb11u8 arm64 [upgradable from: 1.18.3-6+deb11u5]
+libicu67/oldoldstable-security 67.1-7+deb11u1 arm64 [upgradable from: 67.1-7]
+libiperf0/oldoldstable-security 3.9-1+deb11u3 arm64 [upgradable from: 3.9-1+deb11u1]
+libjq1/oldoldstable-security 1.6-2.1+deb11u3 arm64 [upgradable from: 1.6-2.1]
+libk5crypto3/oldoldstable-security 1.18.3-6+deb11u8 arm64 [upgradable from: 1.18.3-6+deb11u5]
+libkrb5-3/oldoldstable-security 1.18.3-6+deb11u8 arm64 [upgradable from: 1.18.3-6+deb11u5]
+libkrb5support0/oldoldstable-security 1.18.3-6+deb11u8 arm64 [upgradable from: 1.18.3-6+deb11u5]
+liblzma5/oldoldstable-security 5.2.5-2.1~deb11u2 arm64 [upgradable from: 5.2.5-2.1~deb11u1]
+libnghttp2-14/oldoldstable-security 1.43.0-1+deb11u3 arm64 [upgradable from: 1.43.0-1+deb11u1]
+libnss-myhostname/oldoldstable-security 247.3-7+deb11u8 arm64 [upgradable from: 247.3-7+deb11u5]
+libntfs-3g883/oldoldstable-security 1:2017.3.23AR.3-4+deb11u5 arm64 [upgradable from: 1:2017.3.23AR.3-4+deb11u4]
+libpackagekit-glib2-18/oldoldstable-security 1.2.2-2+deb11u1 arm64 [upgradable from: 1.2.2-2]
+libpam-modules-bin/oldoldstable-security 1.4.0-9+deb11u2 arm64 [upgradable from: 1.4.0-9+deb11u1]
+libpam-modules/oldoldstable-security 1.4.0-9+deb11u2 arm64 [upgradable from: 1.4.0-9+deb11u1]
+libpam-runtime/oldoldstable-security,oldoldstable-security 1.4.0-9+deb11u2 all [upgradable from: 1.4.0-9+deb11u1]
+libpam-systemd/oldoldstable-security 247.3-7+deb11u8 arm64 [upgradable from: 247.3-7+deb11u5]
+libpam0g/oldoldstable-security 1.4.0-9+deb11u2 arm64 [upgradable from: 1.4.0-9+deb11u1]
+libperl5.32/oldoldstable-security 5.32.1-4+deb11u5 arm64 [upgradable from: 5.32.1-4+deb11u3]
+libpng16-16/oldoldstable-security 1.6.37-3+deb11u4 arm64 [upgradable from: 1.6.37-3]
+libpolkit-agent-1-0/oldoldstable-security 0.105-31+deb11u2 arm64 [upgradable from: 0.105-31+deb11u1]
+libpolkit-gobject-1-0/oldoldstable-security 0.105-31+deb11u2 arm64 [upgradable from: 0.105-31+deb11u1]
+libpython3.9-minimal/oldoldstable-security 3.9.2-1+deb11u7 arm64 [upgradable from: 3.9.2-1]
+libpython3.9-stdlib/oldoldstable-security 3.9.2-1+deb11u7 arm64 [upgradable from: 3.9.2-1]
+libsepol1/oldoldstable-security 3.1-1+deb11u1 arm64 [upgradable from: 3.1-1]
+libsndfile1/oldoldstable-security 1.0.31-2+deb11u2 arm64 [upgradable from: 1.0.31-2]
+libsqlite3-0/oldoldstable-security 3.34.1-3+deb11u1 arm64 [upgradable from: 3.34.1-3]
+libss2/oldoldstable-security 1.46.2-2+deb11u1 arm64 [upgradable from: 1.46.2-2]
+libssl-dev/oldoldstable-security 1.1.1w-0+deb11u8 arm64 [upgradable from: 1.1.1w-0+deb11u1]
+libssl1.1/oldoldstable-security 1.1.1w-0+deb11u8 arm64 [upgradable from: 1.1.1w-0+deb11u1]
+libsystemd0/oldoldstable-security 247.3-7+deb11u8 arm64 [upgradable from: 247.3-7+deb11u5]
+libtasn1-6/oldoldstable-security 4.16.0-2+deb11u2 arm64 [upgradable from: 4.16.0-2+deb11u1]
+libudev1/oldoldstable-security 247.3-7+deb11u8 arm64 [upgradable from: 247.3-7+deb11u5]
+libxml2/oldoldstable-security 2.9.10+dfsg-6.7+deb11u10 arm64 [upgradable from: 2.9.10+dfsg-6.7+deb11u4]
+linux-libc-dev/oldoldstable-security 5.10.262-1 arm64 [upgradable from: 5.10.223-1]
+locales/oldoldstable-security,oldoldstable-security 2.31-13+deb11u14 all [upgradable from: 2.31-13+deb11u11]
+login/oldoldstable-security 1:4.8.1-1+deb11u1 arm64 [upgradable from: 1:4.8.1-1]
+logsave/oldoldstable-security 1.46.2-2+deb11u1 arm64 [upgradable from: 1.46.2-2]
+net-tools/oldoldstable-security 1.60+git20181103.0eebece-1+deb11u2 arm64 [upgradable from: 1.60+git20181103.0eebece-1+deb11u1]
+ntfs-3g/oldoldstable-security 1:2017.3.23AR.3-4+deb11u5 arm64 [upgradable from: 1:2017.3.23AR.3-4+deb11u4]
+openssh-client/oldoldstable-security 1:8.4p1-5+deb11u7 arm64 [upgradable from: 1:8.4p1-5+deb11u3]
+openssh-server/oldoldstable-security 1:8.4p1-5+deb11u7 arm64 [upgradable from: 1:8.4p1-5+deb11u3]
+openssh-sftp-server/oldoldstable-security 1:8.4p1-5+deb11u7 arm64 [upgradable from: 1:8.4p1-5+deb11u3]
+openssl/oldoldstable-security 1.1.1w-0+deb11u8 arm64 [upgradable from: 1.1.1w-0+deb11u1]
+passwd/oldoldstable-security 1:4.8.1-1+deb11u1 arm64 [upgradable from: 1:4.8.1-1]
+perl-base/oldoldstable-security 5.32.1-4+deb11u5 arm64 [upgradable from: 5.32.1-4+deb11u3]
+perl-modules-5.32/oldoldstable-security,oldoldstable-security 5.32.1-4+deb11u5 all [upgradable from: 5.32.1-4+deb11u3]
+perl/oldoldstable-security 5.32.1-4+deb11u5 arm64 [upgradable from: 5.32.1-4+deb11u3]
+policykit-1/oldoldstable-security 0.105-31+deb11u2 arm64 [upgradable from: 0.105-31+deb11u1]
+python-apt-common/oldoldstable-security,oldoldstable-security 2.2.1.1 all [upgradable from: 2.2.1]
+python3-apt/oldoldstable-security 2.2.1.1 arm64 [upgradable from: 2.2.1]
+python3.9-minimal/oldoldstable-security 3.9.2-1+deb11u7 arm64 [upgradable from: 3.9.2-1]
+python3.9/oldoldstable-security 3.9.2-1+deb11u7 arm64 [upgradable from: 3.9.2-1]
+rsync/oldoldstable-security 3.2.3-4+deb11u4 arm64 [upgradable from: 3.2.3-4+deb11u1]
+sudo/oldoldstable-security 1.9.5p2-3+deb11u4 arm64 [upgradable from: 1.9.5p2-3+deb11u1]
+systemd-sysv/oldoldstable-security 247.3-7+deb11u8 arm64 [upgradable from: 247.3-7+deb11u5]
+systemd/oldoldstable-security 247.3-7+deb11u8 arm64 [upgradable from: 247.3-7+deb11u5]
+tzdata/oldoldstable-security,oldoldstable-security 2026b-0+deb11u1 all [upgradable from: 2024a-0+deb11u1]
+u-boot-tools/oldoldstable-security 2021.01+dfsg-5+deb11u3 arm64 [upgradable from: 2021.01+dfsg-5]
+ucf/oldoldstable-security,oldoldstable-security 3.0043+deb11u2 all [upgradable from: 3.0043]
+udev/oldoldstable-security 247.3-7+deb11u8 arm64 [upgradable from: 247.3-7+deb11u5]
+unzip/oldoldstable-security 6.0-26+deb11u2 arm64 [upgradable from: 6.0-26+deb11u1]
+vim-common/oldoldstable-security,oldoldstable-security 2:8.2.2434-3+deb11u3 all [upgradable from: 2:8.2.2434-3+deb11u1]
+vim-runtime/oldoldstable-security,oldoldstable-security 2:8.2.2434-3+deb11u3 all [upgradable from: 2:8.2.2434-3+deb11u1]
+vim/oldoldstable-security 2:8.2.2434-3+deb11u3 arm64 [upgradable from: 2:8.2.2434-3+deb11u1]
+wget/oldoldstable-security 1.21-1+deb11u2 arm64 [upgradable from: 1.21-1+deb11u1]
+wireless-regdb/oldoldstable-security,oldoldstable-security 2026.05.30-1~deb11u1 all [upgradable from: 2022.04.08-2~deb11u1]
+wpasupplicant/oldoldstable-security 2:2.9.0-21+deb11u3 arm64 [upgradable from: 2:2.9.0-21+deb11u2]
+xxd/oldoldstable-security 2:8.2.2434-3+deb11u3 arm64 [upgradable from: 2:8.2.2434-3+deb11u1]
+xz-utils/oldoldstable-security 5.2.5-2.1~deb11u2 arm64 [upgradable from: 5.2.5-2.1~deb11u1]
+##### installed packages
+adduser 3.118+deb11u1
+alsa-utils 1.2.4-1
+apt 2.2.4
+apt-file 3.2.2
+apt-utils 2.2.4
+aptitude 0.8.13-3
+aptitude-common 0.8.13-3
+autoconf 2.69-14
+automake 1:1.16.3-2
+autotools-dev 20180224.1+nmu1
+avahi-autoipd 0.8-5+deb11u2
+avahi-daemon 0.8-5+deb11u2
+base-files 11.1+deb11u11
+base-passwd 3.5.51
+bash 5.1-2+deb11u1
+bash-completion 1:2.11-2
+bc 1.07.1-2+b2
+bind9-dnsutils 1:9.16.50-1~deb11u2
+bind9-host 1:9.16.50-1~deb11u2
+bind9-libs:arm64 1:9.16.50-1~deb11u2
+binutils 2.35.2-2
+binutils-aarch64-linux-gnu 2.35.2-2
+binutils-common:arm64 2.35.2-2
+bison 2:3.7.5+dfsg-1
+bluetooth 5.55-3.1+deb11u2
+bluez 5.55-3.1+deb11u2
+bluez-tools 2.0~20170911.0.7cb788c-4
+bridge-utils 1.7-1
+bsdutils 1:2.36.1-8+deb11u2
+bsp-cli-h616 2.3.3
+btrfs-progs 5.10.1-2
+build-essential 12.9
+bzip2 1.0.8-4
+ca-certificates 20210119
+command-not-found 20.10.1-1+deb11u1
+coreutils 8.32-4
+cpio 2.13+dfsg-7.1~deb11u1
+cpp 4:10.2.1-1
+cpp-10 10.2.1-6
+cpufrequtils 008-2
+cracklib-runtime 2.9.6-3.4
+crda 4.14+git20191112.9856751-1
+cron 3.0pl1-137
+curl 7.74.0-1.3+deb11u13
+dash 0.5.11+git20200708+dd9ef66-5
+dbus 1.12.28-0+deb11u1
+dbus-user-session 1.12.28-0+deb11u1
+dctrl-tools 2.24-3
+debconf 1.5.77
+debconf-utils 1.5.77
+debian-archive-keyring 2021.1.1+deb11u1
+debianutils 4.11.2
+device-tree-compiler 1.6.0-1
+dialog 1.3-20201126-1
+diffutils 1:3.7-5
+dirmngr 2.2.27-2+deb11u2
+distro-info-data 0.51+deb11u6
+dkms 2.8.4-3
+dmsetup 2:1.02.175-2.1
+dnsutils 1:9.16.50-1~deb11u2
+dosfstools 4.2-1
+dpkg 1.20.13
+dpkg-dev 1.20.13
+e2fsprogs 1.46.2-2
+ethtool 1:5.9-1
+evtest 1:1.34-1
+expect 5.45.4-2+b1
+f2fs-tools 1.14.0-2
+f3 8.0-1
+fake-hwclock 0.12
+fbset 2.1-32
+fdisk 2.36.1-8+deb11u2
+figlet 2.2.5-3
+file 1:5.39-3+deb11u1
+findutils 4.8.0-1
+flex 2.6.4-8
+fontconfig 2.13.1-4.2
+fontconfig-config 2.13.1-4.2
+fonts-dejavu-core 2.37-2
+fonts-wqy-zenhei 0.9.45-8
+fping 5.0-1
+fuse 2.9.9-5
+g++ 4:10.2.1-1
+g++-10 10.2.1-6
+gcc 4:10.2.1-1
+gcc-10 10.2.1-6
+gcc-10-base:arm64 10.2.1-6
+gcc-9-base:arm64 9.3.0-22
+gir1.2-glib-2.0:arm64 1.66.1-1+b1
+gir1.2-packagekitglib-1.0 1.2.2-2
+git 1:2.30.2-1+deb11u2
+git-man 1:2.30.2-1+deb11u2
+gnupg 2.2.27-2+deb11u2
+gnupg-l10n 2.2.27-2+deb11u2
+gnupg-utils 2.2.27-2+deb11u2
+gnupg2 2.2.27-2+deb11u2
+gpg 2.2.27-2+deb11u2
+gpg-agent 2.2.27-2+deb11u2
+gpg-wks-client 2.2.27-2+deb11u2
+gpg-wks-server 2.2.27-2+deb11u2
+gpgconf 2.2.27-2+deb11u2
+gpgsm 2.2.27-2+deb11u2
+gpgv 2.2.27-2+deb11u2
+grep 3.6-1+deb11u1
+gzip 1.10-4+deb11u1
+hdparm 9.60+ds-1
+hostapd 2:2.9.0-21+deb11u3
+hostname 3.23
+hping3 3.a2.ds2-10
+html2text 1.3.2a-28
+htop 3.0.5-7
+ifenslave 2.13~deb11u1
+ifupdown 0.8.36
+init 1.60
+init-system-helpers 1.60
+initramfs-tools 0.140
+initramfs-tools-core 0.140
+iotop 0.6-24-g733f3f8-1.1
+iozone3 489-1
+iperf3 3.9-1+deb11u1
+iproute2 5.10.0-4
+iptables 1.8.7-1
+iputils-arping 3:20210202-1
+iputils-ping 3:20210202-1
+isc-dhcp-client 4.4.1-2.3+deb11u2
+iso-codes 4.6.0-1
+iw 5.9-3
+jq 1.6-2.1
+keyboard-configuration 1.205
+klibc-utils 2.0.8-6.1
+kmod 28-1
+less 551-2+deb11u2
+libacl1:arm64 2.2.53-10
+libao-common 1.2.2+20180113-1.1
+libao4:arm64 1.2.2+20180113-1.1
+libapparmor1:arm64 2.13.6-10
+libapt-pkg-perl 0.1.39
+libapt-pkg6.0:arm64 2.2.4
+libargon2-1:arm64 0~20171227-0.2
+libasan6:arm64 10.2.1-6
+libasound2:arm64 1.2.4-1.1
+libasound2-data 1.2.4-1.1
+libassuan0:arm64 2.5.3-7.1
+libasyncns0:arm64 0.8-6+b2
+libatomic1:arm64 10.2.1-6
+libatopology2:arm64 1.2.4-1.1
+libattr1:arm64 1:2.4.48-6
+libaudit-common 1:3.0-2
+libaudit1:arm64 1:3.0-2
+libavahi-common-data:arm64 0.8-5+deb11u2
+libavahi-common3:arm64 0.8-5+deb11u2
+libavahi-core7:arm64 0.8-5+deb11u2
+libbinutils:arm64 2.35.2-2
+libblkid1:arm64 2.36.1-8+deb11u2
+libbluetooth3:arm64 5.55-3.1+deb11u1
+libboost-iostreams1.74.0:arm64 1.74.0-9
+libbpf0:arm64 1:0.3-2
+libbrotli1:arm64 1.0.9-2+b2
+libbsd0:arm64 0.11.3-1+deb11u1
+libbz2-1.0:arm64 1.0.8-4
+libc-bin 2.31-13+deb11u11
+libc-dev-bin 2.31-13+deb11u11
+libc-l10n 2.31-13+deb11u11
+libc6:arm64 2.31-13+deb11u11
+libc6-dev:arm64 2.31-13+deb11u11
+libcaca0:arm64 0.99.beta19-2.2
+libcap-ng0:arm64 0.7.9-2.2+b1
+libcap2:arm64 1:2.44-1
+libcap2-bin 1:2.44-1
+libcbor0:arm64 0.5.0+dfsg-2
+libcc1-0:arm64 10.2.1-6
+libcom-err2:arm64 1.46.2-2
+libcpufreq0 008-2
+libcrack2:arm64 2.9.6-3.4
+libcrypt-dev:arm64 1:4.4.18-4
+libcrypt1:arm64 1:4.4.18-4
+libcryptsetup12:arm64 2:2.3.7-1+deb11u1
+libctf-nobfd0:arm64 2.35.2-2
+libctf0:arm64 2.35.2-2
+libcurl3-gnutls:arm64 7.74.0-1.3+deb11u13
+libcurl4:arm64 7.74.0-1.3+deb11u13
+libcwidget4:arm64 0.5.18-5
+libdaemon0:arm64 0.14-7.1
+libdb5.3:arm64 5.3.28+dfsg1-0.8
+libdbus-1-3:arm64 1.12.28-0+deb11u1
+libdebconfclient0:arm64 0.260
+libdevmapper1.02.1:arm64 2:1.02.175-2.1
+libdigest-sha-perl 6.02-1+b3
+libdns-export1110 1:9.11.19+dfsg-2.1
+libdpkg-perl 1.20.13
+libdw1:arm64 0.183-1
+libedit2:arm64 3.1-20191231-2+b1
+libelf1:arm64 0.183-1
+liberror-perl 0.17029-1
+libexpat1:arm64 2.2.10-2+deb11u5
+libexporter-tiny-perl 1.002002-1
+libext2fs2:arm64 1.46.2-2
+libfdisk1:arm64 2.36.1-8+deb11u2
+libfdt1:arm64 1.6.0-1
+libffi7:arm64 3.3-6
+libfftw3-single3:arm64 3.3.8-2
+libfido2-1:arm64 1.6.0-2
+libflac8:arm64 1.3.3-2+deb11u2
+libfontconfig1:arm64 2.13.1-4.2
+libfreetype6:arm64 2.10.4+dfsg-1+deb11u1
+libfstrm0:arm64 0.6.0-1+b1
+libfuse2:arm64 2.9.9-5
+libgcc-10-dev:arm64 10.2.1-6
+libgcc-s1:arm64 10.2.1-6
+libgcrypt20:arm64 1.8.7-6
+libgdbm-compat4:arm64 1.19-2
+libgdbm6:arm64 1.19-2
+libgirepository-1.0-1:arm64 1.66.1-1+b1
+libglib2.0-0:arm64 2.66.8-1+deb11u4
+libgmp10:arm64 2:6.2.1+dfsg-1+deb11u1
+libgnutls30:arm64 3.7.1-5+deb11u5
+libgomp1:arm64 10.2.1-6
+libgpg-error0:arm64 1.38-2
+libgpm2:arm64 1.20.7-8
+libgsm1:arm64 1.0.18-2
+libgssapi-krb5-2:arm64 1.18.3-6+deb11u5
+libhogweed6:arm64 3.7.3-1
+libicu67:arm64 67.1-7
+libid3tag0:arm64 0.15.1b-14
+libidn2-0:arm64 2.3.0-5
+libip4tc2:arm64 1.8.7-1
+libip6tc2:arm64 1.8.7-1
+libiperf0:arm64 3.9-1+deb11u1
+libisc-export1105:arm64 1:9.11.19+dfsg-2.1
+libisl23:arm64 0.23-1
+libitm1:arm64 10.2.1-6
+libiw30:arm64 30~pre9-13.1
+libjansson4:arm64 2.13.1-1.1
+libjq1:arm64 1.6-2.1
+libjson-c5:arm64 0.15-2+deb11u1
+libk5crypto3:arm64 1.18.3-6+deb11u5
+libkeyutils1:arm64 1.6.1-2
+libklibc:arm64 2.0.8-6.1
+libkmod2:arm64 28-1
+libkrb5-3:arm64 1.18.3-6+deb11u5
+libkrb5support0:arm64 1.18.3-6+deb11u5
+libksba8:arm64 1.5.0-3+deb11u2
+libldap-2.4-2:arm64 2.4.57+dfsg-3+deb11u1
+liblist-moreutils-perl 0.430-2
+liblist-moreutils-xs-perl 0.430-2
+liblmdb0:arm64 0.9.24-1
+liblocale-gettext-perl 1.07-4+b1
+liblsan0:arm64 10.2.1-6
+libltdl7:arm64 2.4.6-15
+liblz4-1:arm64 1.9.3-2
+liblzma5:arm64 5.2.5-2.1~deb11u1
+liblzo2-2:arm64 2.10-2
+libmad0:arm64 0.15.1b-10
+libmagic-mgc 1:5.39-3+deb11u1
+libmagic1:arm64 1:5.39-3+deb11u1
+libmaxminddb0:arm64 1.5.2-1
+libmd0:arm64 1.0.3-3
+libmm-glib0:arm64 1.14.12-0.2
+libmnl0:arm64 1.0.4-3
+libmount1:arm64 2.36.1-8+deb11u2
+libmp3lame0:arm64 3.100-3
+libmpc3:arm64 1.2.0-1
+libmpdec3:arm64 2.5.1-1
+libmpfr6:arm64 4.1.0-3
+libncurses6:arm64 6.2+20201114-2+deb11u2
+libncursesw6:arm64 6.2+20201114-2+deb11u2
+libndp0:arm64 1.6-1+deb11u1
+libnetfilter-conntrack3:arm64 1.0.8-3
+libnetplan0:arm64 0.101-4
+libnettle8:arm64 3.7.3-1
+libnewt0.52:arm64 0.52.21-4+b3
+libnfnetlink0:arm64 1.0.1-3+b1
+libnftnl11:arm64 1.1.9-1
+libnghttp2-14:arm64 1.43.0-1+deb11u1
+libnl-3-200:arm64 3.4.0-1+b1
+libnl-3-dev:arm64 3.4.0-1+b1
+libnl-genl-3-200:arm64 3.4.0-1+b1
+libnl-genl-3-dev:arm64 3.4.0-1+b1
+libnl-route-3-200:arm64 3.4.0-1+b1
+libnm0:arm64 1.30.6-1+deb11u1
+libnpth0:arm64 1.6-3
+libnsl-dev:arm64 1.3.0-2
+libnsl2:arm64 1.3.0-2
+libnss-myhostname:arm64 247.3-7+deb11u5
+libntfs-3g883 1:2017.3.23AR.3-4+deb11u4
+libogg0:arm64 1.3.4-0.1
+libonig5:arm64 6.9.6-1.1
+libopencore-amrnb0:arm64 0.1.5-1
+libopencore-amrwb0:arm64 0.1.5-1
+libopts25:arm64 1:5.18.16-4
+libopus0:arm64 1.3.1-0.1
+libp11-kit0:arm64 0.23.22-1
+libpackagekit-glib2-18:arm64 1.2.2-2
+libpam-modules:arm64 1.4.0-9+deb11u1
+libpam-modules-bin 1.4.0-9+deb11u1
+libpam-runtime 1.4.0-9+deb11u1
+libpam-systemd:arm64 247.3-7+deb11u5
+libpam0g:arm64 1.4.0-9+deb11u1
+libparted2:arm64 3.4-1
+libpcap0.8:arm64 1.10.0-2
+libpci3:arm64 1:3.7.0-5
+libpcre2-8-0:arm64 10.36-2+deb11u1
+libpcre3:arm64 2:8.39-13
+libpcsclite1:arm64 1.9.1-1
+libperl5.32:arm64 5.32.1-4+deb11u3
+libpng16-16:arm64 1.6.37-3
+libpolkit-agent-1-0:arm64 0.105-31+deb11u1
+libpolkit-gobject-1-0:arm64 0.105-31+deb11u1
+libpopt0:arm64 1.18-2
+libproc-processtable-perl 0.59-2+b1
+libprocps8:arm64 2:3.3.17-5
+libprotobuf-c1:arm64 1.3.3-1+b2
+libpsl5:arm64 0.21.0-1.2
+libpulse0:arm64 14.2-2
+libpython3-stdlib:arm64 3.9.2-3
+libpython3.9-minimal:arm64 3.9.2-1
+libpython3.9-stdlib:arm64 3.9.2-1
+libreadline8:arm64 8.1-1
+libregexp-assemble-perl 0.36-1.1
+librtmp1:arm64 2.4+20151223.gitfa8646d.1-2+b2
+libsamplerate0:arm64 0.2.1+ds0-1
+libsasl2-2:arm64 2.1.27+dfsg-2.1+deb11u1
+libsasl2-modules-db:arm64 2.1.27+dfsg-2.1+deb11u1
+libsctp1:arm64 1.0.18+dfsg-1
+libseccomp2:arm64 2.5.1-1+deb11u1
+libselinux1:arm64 3.1-3
+libsemanage-common 3.1-1
+libsemanage1:arm64 3.1-1+b2
+libsepol1:arm64 3.1-1
+libsigc++-2.0-0v5:arm64 2.10.4-2
+libsigsegv2:arm64 2.13-1
+libslang2:arm64 2.3.2-5
+libsmartcols1:arm64 2.36.1-8+deb11u2
+libsndfile1:arm64 1.0.31-2
+libsox-fmt-all:arm64 14.4.2+git20190427-2+deb11u2
+libsox-fmt-alsa:arm64 14.4.2+git20190427-2+deb11u2
+libsox-fmt-ao:arm64 14.4.2+git20190427-2+deb11u2
+libsox-fmt-base:arm64 14.4.2+git20190427-2+deb11u2
+libsox-fmt-mp3:arm64 14.4.2+git20190427-2+deb11u2
+libsox-fmt-oss:arm64 14.4.2+git20190427-2+deb11u2
+libsox-fmt-pulse:arm64 14.4.2+git20190427-2+deb11u2
+libsox3:arm64 14.4.2+git20190427-2+deb11u2
+libsqlite3-0:arm64 3.34.1-3
+libss2:arm64 1.46.2-2
+libssh2-1:arm64 1.9.0-2+deb11u1
+libssl-dev:arm64 1.1.1w-0+deb11u1
+libssl1.1:arm64 1.1.1w-0+deb11u1
+libstdc++-10-dev:arm64 10.2.1-6
+libstdc++6:arm64 10.2.1-6
+libsysfs2:arm64 2.1.0+repack-7
+libsystemd0:arm64 247.3-7+deb11u5
+libtasn1-6:arm64 4.16.0-2+deb11u1
+libtcl8.6:arm64 8.6.11+dfsg-1
+libteamdctl0:arm64 1.31-1
+libtinfo6:arm64 6.2+20201114-2+deb11u2
+libtirpc-common 1.3.1-1+deb11u1
+libtirpc-dev:arm64 1.3.1-1+deb11u1
+libtirpc3:arm64 1.3.1-1+deb11u1
+libtsan0:arm64 10.2.1-6
+libtwolame0:arm64 0.4.0-2
+libubsan1:arm64 10.2.1-6
+libudev1:arm64 247.3-7+deb11u5
+libunistring2:arm64 0.9.10-4
+libusb-1.0-0:arm64 2:1.0.24-3
+libutempter0:arm64 1.2.1-2
+libuuid1:arm64 2.36.1-8+deb11u2
+libuv1:arm64 1.40.0-2+deb11u1
+libvorbis0a:arm64 1.3.7-1
+libvorbisenc2:arm64 1.3.7-1
+libvorbisfile3:arm64 1.3.7-1
+libwavpack1:arm64 5.4.0-1
+libwrap0:arm64 7.6.q-31
+libwrap0-dev:arm64 7.6.q-31
+libxapian30:arm64 1.4.18-3+deb11u1
+libxau6:arm64 1:1.0.9-1
+libxcb1:arm64 1.14-3
+libxdmcp6:arm64 1:1.1.2-3
+libxml2:arm64 2.9.10+dfsg-6.7+deb11u4
+libxtables12:arm64 1.8.7-1
+libxxhash0:arm64 0.8.0-2
+libyaml-0-2:arm64 0.2.2-1
+libzstd1:arm64 1.4.8+dfsg-2.1
+linux-base 4.6
+linux-dtb-current-sun50iw9 2.3.3
+linux-headers-current-sun50iw9 2.3.3
+linux-image-current-sun50iw9 2.3.3
+linux-libc-dev:arm64 5.10.223-1
+linux-u-boot-h616-current 2.3.3
+locales 2.31-13+deb11u11
+login 1:4.8.1-1
+logsave 1.46.2-2
+lsb-base 11.1.0
+lsb-release 11.1.0
+lsof 4.93.2+dfsg-1.1
+m4 1.4.18-5
+make 4.3-4.1
+mawk 1.3.4.20200120-2
+mc 3:4.8.26-1.1
+mc-data 3:4.8.26-1.1
+media-types 4.0.0
+mmc-utils 0+git20180327.b4fe0c8c-1
+mount 2.36.1-8+deb11u2
+nano 5.4-2+deb11u3
+ncurses-base 6.2+20201114-2+deb11u2
+ncurses-bin 6.2+20201114-2+deb11u2
+ncurses-term 6.2+20201114-2+deb11u2
+net-tools 1.60+git20181103.0eebece-1+deb11u1
+netbase 6.3
+netplan.io 0.101-4
+network-manager 1.30.6-1+deb11u1
+nocache 1.1-1
+ntfs-3g 1:2017.3.23AR.3-4+deb11u4
+ntp 1:4.2.8p15+dfsg-1
+ntpdate 1:4.2.8p15+dfsg-1
+openssh-client 1:8.4p1-5+deb11u3
+openssh-server 1:8.4p1-5+deb11u3
+openssh-sftp-server 1:8.4p1-5+deb11u3
+openssl 1.1.1w-0+deb11u1
+parted 3.4-1
+passwd 1:4.8.1-1
+patch 2.7.6-7
+pci.ids 0.0~2021.02.08-1
+pciutils 1:3.7.0-5
+perl 5.32.1-4+deb11u3
+perl-base 5.32.1-4+deb11u3
+perl-modules-5.32 5.32.1-4+deb11u3
+pinentry-curses 1.1.0-4
+policykit-1 0.105-31+deb11u1
+procps 2:3.3.17-5
+psmisc 23.4-2
+pv 1.6.6-1
+python-apt-common 2.2.1
+python3 3.9.2-3
+python3-apt 2.2.1
+python3-dbus 1.2.16-5
+python3-distutils 3.9.2-1
+python3-gi 3.38.0-2
+python3-lib2to3 3.9.2-1
+python3-minimal 3.9.2-3
+python3-netifaces 0.10.9-0.2+b3
+python3-pycurl 7.43.0.6-5
+python3-software-properties 0.96.20.2-2.1
+python3-yaml 5.3.1-5
+python3.9 3.9.2-1
+python3.9-minimal 3.9.2-1
+readline-common 8.1-1
+resolvconf 1.87
+rfkill 2.36.1-8+deb11u2
+rsync 3.2.3-4+deb11u1
+runit-helper 2.10.3
+screen 4.8.0-6
+sed 4.7-1
+sensible-utils 0.0.14
+software-properties-common 0.96.20.2-2.1
+sox 14.4.2+git20190427-2+deb11u2
+stress 1.0.4-7
+sudo 1.9.5p2-3+deb11u1
+sunxi-tools 1.4.2+git20181114.6d598a-3
+sysfsutils 2.1.0+repack-7
+systemd 247.3-7+deb11u5
+systemd-sysv 247.3-7+deb11u5
+sysvinit-utils 2.96-7+deb11u1
+tar 1.34+dfsg-1+deb11u1
+tcl-expect:arm64 5.45.4-2+b1
+tcl8.6 8.6.11+dfsg-1
+tofrodos 1.7.13+ds-5
+toilet 0.3-1.3
+toilet-fonts 0.3-1.3
+tzdata 2024a-0+deb11u1
+u-boot-tools 2021.01+dfsg-5
+ucf 3.0043
+udev 247.3-7+deb11u5
+unicode-data 13.0.0-2
+unzip 6.0-26+deb11u1
+usbutils 1:013-3
+util-linux 2.36.1-8+deb11u2
+vim 2:8.2.2434-3+deb11u1
+vim-common 2:8.2.2434-3+deb11u1
+vim-runtime 2:8.2.2434-3+deb11u1
+vlan 2.0.5
+wget 1.21-1+deb11u1
+whiptail 0.52.21-4+b3
+wireless-regdb 2022.04.08-2~deb11u1
+wireless-tools 30~pre9-13.1
+wpasupplicant 2:2.9.0-21+deb11u2
+xxd 2:8.2.2434-3+deb11u1
+xz-utils 5.2.5-2.1~deb11u1
+zhongchuang-client 0.1.0
+zlib1g:arm64 1:1.2.11.dfsg-2+deb11u2
+##### ip/network
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+eth0             DOWN           
+wlan0            UP             10.88.20.44/24 10.88.20.48/24 fe80::7fbe:a155:cb98:586e/64 
+can0             UP             
+I Am Inevitable 5ghz:802-11-wireless
+Ifupdown (can0):802-3-ethernet
+Spixi-10CSZY:802-11-wireless
+Spixi-10CSZY5G:802-11-wireless
+Spixi_5G_8FA3:802-11-wireless
+Spixi_8FA3:802-11-wireless
+Spixi-9F:802-11-wireless
+Wired connection 1:802-3-ethernet
+ZYIPTest:802-11-wireless
+##### users/groups
+uid=1000(sovol) gid=1000(sovol) groups=1000(sovol),5(tty),6(disk),20(dialout),27(sudo),29(audio),44(video),46(plugdev),60(games),100(users),101(systemd-journal),105(input),109(netdev),111(ssh),1001(moonraker-admin)
+nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin
+sovol:x:1000:1000:sovol,,,:/home/sovol:/bin/bash
+##### ssh
+Include /etc/ssh/sshd_config.d/*.conf
+PermitRootLogin no
+PubkeyAuthentication yes
+ChallengeResponseAuthentication no
+UsePAM yes
+X11Forwarding yes
+PrintMotd no
+AcceptEnv LANG LC_*
+Subsystem	sftp	/usr/lib/openssh/sftp-server
