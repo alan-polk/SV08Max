@@ -3,3 +3,11 @@
 *.db
 moonraker-sql.db
 logs/
+
+# Paid/licensed mounting models - never commit or share
+*.stl
+*.STL
+*.3mf
+*.step
+*.stp
+*.obj
