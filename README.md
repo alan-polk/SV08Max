@@ -34,3 +34,12 @@ Replaces the stock Sovol buffer/feeder with a BIQU Panda feeder (single feeder, 
 - Author's install: upload the macro as `btt_feeder.cfg` to the config dir, then in `printer.cfg` replace `[include buffer_stepper.cfg]` with `#[include buffer_stepper.cfg]` + `[include btt_feeder.cfg]`. Bracket choice (single/double/triple) does not change the macros; triple enables auto-refill.
 - No two-way comms between printer and feeder: for filament other than PLA/PETG, preheat the nozzle manually before using the feeder's load/unload buttons (this is why `BTT_UNLOAD_FILAMENT` doesn't heat).
 - **Status: NOT installed yet** (waiting on author clarification). Known open issues in v4: runout handler calls `_FIL_CHANGE_PARK` (undefined on stock Sovol – should be `PAUSE STATE=filament_change`); filament sensor is `PB2` on the main MCU (unverified wiring). Sovol's `Macro.cfg` still calls `BUFFER_STEPPER`, LED `SET_PIN`, `MANUAL_FEED`, `NOZZLE_CLOG_CHECK`, `variables`, `CHECK_FILAMENT_STATUS`; v4 stubs these – verify after install.
+
+## Board pinouts & filament sensor planning (researched 2026-10-08)
+- Sovol publishes the SV08 Max board pinouts: https://github.com/Sovol3d/SV08MAX/tree/main/Motherboard (`Mcu_Pin_definition.pdf` = mainboard, STM32H750 = `[mcu]`; `Extra_Pin_definition.pdf` = toolhead board, STM32F103 = `extra_mcu`). Not copied here; fetch from the link.
+- **`PB2` (used by the feeder macro's `filament_sensor`) is not on any connector in either diagram.** Treat that sensor as a placeholder until the author says otherwise.
+- Pins already used by `printer.cfg`: X endstop `extra_mcu:PA10`, Y endstop `PD1`, plus motors/fans/heaters/eddy (`PB10`/`PB11` on toolhead = eddy I2C).
+- Free candidate inputs for a BTT SFS V2.0 (needs 2 signals: runout switch + motion encoder, each with `^` pull-up, 3.3-5 V supply):
+  - Toolhead board header `5V GND PC15 PC14` (`extra_mcu:PC15`/`PC14`) – closest to the extruder. Caution: F103 PC13-15 are not 5 V-tolerant, so power the SFS from 3.3 V or verify its output level before connecting.
+  - Mainboard "X-axis limited" header `PD6 GND 5V` (single signal; X endstop is on the toolhead, so it is unused).
+- SFS V2.0 manual: https://github.com/bigtreetech/smart-filament-detection-module/blob/master/V2.0/Manual/SFS%20V2.0%20User%20Manual_20231123.pdf – `filament_switch_sensor` + `filament_motion_sensor` (extruder: extruder), `detection_length` start ~3 mm, raise in 1 mm steps on false triggers (farther from the extruder = higher). Runout gcode should call Sovol's `PAUSE`.
