@@ -43,3 +43,10 @@ Replaces the stock Sovol buffer/feeder with a BIQU Panda feeder (single feeder, 
   - Toolhead board header `5V GND PC15 PC14` (`extra_mcu:PC15`/`PC14`) – closest to the extruder. Caution: F103 PC13-15 are not 5 V-tolerant, so power the SFS from 3.3 V or verify its output level before connecting.
   - Mainboard "X-axis limited" header `PD6 GND 5V` (single signal; X endstop is on the toolhead, so it is unused).
 - SFS V2.0 manual: https://github.com/bigtreetech/smart-filament-detection-module/blob/master/V2.0/Manual/SFS%20V2.0%20User%20Manual_20231123.pdf – `filament_switch_sensor` + `filament_motion_sensor` (extruder: extruder), `detection_length` start ~3 mm, raise in 1 mm steps on false triggers (farther from the extruder = higher). Runout gcode should call Sovol's `PAUSE`.
+
+### SFS V2.0 decisions (2026-10-08)
+- Use the **motion output only** (runout is handled by the Panda feeder). Wire black (GND) + red (VCC) + green (motion) into one 3-pin plug for the mainboard "X-axis limit" header (`PD6 GND 5V`); leave the blue (switch) wire unconnected. Verify pin order against the pinout PDF before powering up.
+- Config sketch: `[filament_motion_sensor encoder_sensor]`, `switch_pin: ^PD6`, `extruder: extruder`, `pause_on_runout: False`, runout_gcode `PAUSE`.
+- **Must disable the motion sensor** (`SET_FILAMENT_SENSOR SENSOR=encoder_sensor ENABLE=0`, re-enable after) in the feeder load/unload macros and Sovol LOAD_FILAMENT/UNLOAD_FILAMENT, and for any purge/prime with no filament flow, or it will pause mid-load.
+- Mount: **outside the enclosure, as close to the enclosure's filament inlet as possible** (SFS rated max 50 C). Design after the enclosure is installed. The tube run to the extruder adds slack, so expect a `detection_length` above the 3 mm default (start ~5-10 mm and tune in 1 mm steps).
+- Sequence after the Halloween print jobs: SSH hardening -> Panda feeder install -> SFS install. Do not modify the printer while the big jobs run.
