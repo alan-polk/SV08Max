@@ -1,0 +1,52 @@
+# A sample configuration for dhcpcd.
+# See dhcpcd.conf(5) for details.
+
+# Allow users of this group to interact with dhcpcd via the control socket.
+#controlgroup wheel
+
+# Inform the DHCP server of our hostname for DDNS.
+hostname
+
+# Use the hardware address of the interface for the Client ID.
+#clientid
+# or
+# Use the same DUID + IAID as set in DHCPv6 for DHCPv4 ClientID as per RFC4361.
+# Some non-RFC compliant DHCP servers do not reply with this set.
+# In this case, comment out duid and enable clientid above.
+duid
+
+# Persist interface configuration when dhcpcd exits.
+persistent
+
+# Rapid commit support.
+# Safe to enable by default because it requires the equivalent option set
+# on the server to actually work.
+option rapid_commit
+
+# A list of options to request from the DHCP server.
+option domain_name_servers, domain_name, domain_search, host_name
+option classless_static_routes
+# Respect the network MTU. This is applied to DHCP routes.
+option interface_mtu
+
+# Most distributions have NTP support.
+#option ntp_servers
+
+# A ServerID is required by RFC2131.
+require dhcp_server_identifier
+
+# Generate SLAAC address using the Hardware Address of the interface
+#slaac hwaddr
+# OR generate Stable Private IPv6 Addresses based from the DUID
+slaac private
+
+# 2026-10-13: NetworkManager already handles DHCP on wlan0. Running dhcpcd on it too
+# adds a 2nd address (.48) and drops the proto-kernel route, which makes Sovol watchdog
+# /boot/scripts/connect_wifi.sh think the network is down and reconnect every ~13 s.
+denyinterfaces wlan0
+
+# Sovol touchscreen app (zhongchuang_klipper) runs "dhcpcd wlan0" on every wpa CONNECTED event,
+# which bypasses denyinterfaces. Per-interface noipv4/noipv6 applies to explicit invocations too.
+interface wlan0
+noipv4
+noipv6

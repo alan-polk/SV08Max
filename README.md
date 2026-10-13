@@ -28,6 +28,16 @@ Working repo for a Sovol SV08 Max (Klipper). Holds config/macro backups, notes f
 - Harmless warning during upgrade: `ln: failed to create hard link /boot/initrd.img-...dpkg-bak` because `/boot` is FAT. initrd/uInitrd regenerated fine.
 - Still TODO: change default `sovol` password, add SSH key auth.
 
+## Wi-Fi reconnect loop fix (2026-10-13)
+**Symptom:** Wi-Fi dropped and re-joined roughly every 13 s (`wpa_supplicant` `CTRL-EVENT-DISCONNECTED reason=3 locally_generated=1`), Mainsail kept disconnecting, and Moonraker's detected IP flipped between `.44`, `.48` and 169.254.x.x. Changing 5 GHz -> 2.4 GHz SSID made no difference; it is not a signal/antenna/AP problem.
+**Cause (a Sovol image bug, not RF):**
+- Both NetworkManager and `dhcpcd` run DHCP on `wlan0`, so it gets two addresses (NM `.44`, dhcpcd `.48`). When dhcpcd adds `.48`, the `wlan0 proto kernel` route disappears.
+- `/boot/scripts/connect_wifi.sh` (root watchdog, `check_interval=5`) treats "no `wlan0 proto kernel` route" as "no network", logs `==== No network connection...` to `/boot/scripts/wifi.log`, and runs `nmcli device connect wlan0`, which drops the link. The loop repeats.
+- Sovol's touchscreen app (`zhongchuang_klipper`, source `/home/sovol/zhongchuang/src/mks_wpa_cli.cpp`) runs `system("dhcpcd wlan0")` on every `CTRL-EVENT-CONNECTED`. That explicit call **bypasses `denyinterfaces`**, so `denyinterfaces wlan0` alone did not work.
+**Fix:** appended to `/etc/dhcpcd.conf` (a `denyinterfaces wlan0` line plus a per-interface block `interface wlan0` / `noipv4` / `noipv6`), then `systemctl restart dhcpcd` and `ip addr del 10.88.20.48/24 dev wlan0`. Original saved on the printer as `/etc/dhcpcd.conf.bak-20261013`.
+**Files:** `backup/2026-10-13/system/dhcpcd.conf.original`, `dhcpcd.conf.fixed`, and `connect_wifi.sh.sovol-stock` (unmodified Sovol watchdog, for reference). **If a Sovol OTA or reflash wipes the fix**, re-apply `dhcpcd.conf.fixed` to `/etc/dhcpcd.conf` and restart `dhcpcd`.
+**Verify:** `ip -br addr show wlan0` shows only one IPv4 address, and `tail /boot/scripts/wifi.log` stops adding "No network connection" lines.
+
 ## BIQU Panda (BTT) auxiliary feeder upgrade
 Replaces the stock Sovol buffer/feeder with a BIQU Panda feeder (single feeder, no hub yet). Mounting STL/3MF files are a **paid kit and are git-ignored** – never commit them. Source: author's Cults3D post (macros updated through 2026-06-26).
 - `bique feeder files/` holds the macro versions, named after the kit zips: `DKEU_v1` (oldest; reuses `LOAD_FILAMENT`/`UNLOAD_FILAMENT` names, DKEU-modified printers only), `STOCK_v2` (stock Sovol, `BTT_` names), `STOCK_DKEU_v4` (**newest, unified for stock and DKEU printers – use this**). STOCK = stock Sovol SV08 Max, DKEU = the modified variant.
