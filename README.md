@@ -28,6 +28,24 @@ Working repo for a Sovol SV08 Max (Klipper). Holds config/macro backups, notes f
 - Harmless warning during upgrade: `ln: failed to create hard link /boot/initrd.img-...dpkg-bak` because `/boot` is FAT. initrd/uInitrd regenerated fine.
 - Still TODO: change default `sovol` password, add SSH key auth.
 
+## Eddy sensor failure -> nozzle-into-bed crashes (Oct 2026, warranty)
+**Symptom:** during start-of-print Z-offset calibration, `G28 Z` or QGL the nozzle is driven into the bed; the four Z motors keep trying to move and torque the gantry until the e-stop. Intermittent (about 4 incidents in roughly 30 prints). Printer was bone stock. Damaged the PEI sheet.
+**Cause (from `klippy.log`):** the toolhead eddy sensor (LDC1612, `probe_eddy_current eddy`) stops producing valid data. The first status line is `report ldc1612 i2c register: cr1_data=1025 cr2_data=36 sr1_data=512 sr2_data=2 err_code=36` (once also preceded by `cr1_data=1 sr1_data=1024 err_code=34`), then `cr1_data=257 sr1_data=0 err_code=36` repeats thousands of times. On this machine the eddy sensor **is** the Z endstop (`endstop_pin: probe:z_virtual_endstop`), so with no data it never triggers and the gantry keeps descending (only `position_min: -10` stops it). Healthy sessions log no `ldc1612 i2c register` lines at all. Related Klipper errors: `Unable to obtain 'sensor_bulk_status' response`, `probe_eddy_current sensor outage`.
+**Timeline (device clock, UTC; printer has no RTC so times are approximate):**
+- ~2026-10-07: start-of-print calibration probed `z=510.31` then `z=499.99` at bed centre, then the sensor error loop (log since rotated off the printer; only chat excerpts remain).
+- 2026-10-10 14:47:45: manual `G28` with the toolhead 400+ mm up; sensor error loop 1,589 lines, e-stop (`Klippy has shutdown`, `Homing failed due to printer shutdown`).
+- 2026-10-10 (later): bed lowered to ~35 mm, power cycled, homed again, jammed again (no klippy log survived).
+- 2026-10-13 ~13:49:57: failure during QGL, 15,052 error lines, `probe_eddy_current sensor outage`. Nozzle target 225 C, bed target 0 (cold bed ~25.8 C). Forum posts report similar crashes with a cold bed; unproven here.
+**Ruled out:** ribbon cable reseated at both ends (user-verified), gantry level/mechanics (log points at sensor data), homing height (lowering the bed did not prevent a repeat).
+**Evidence (kept outside the repo, large):** `/Volumes/4TB-NVME/comma/Claude Artifacts/SV08Max-warranty-logs-2026-10-12/` (+ `.zip`) and `.../SV08Max-warranty-logs-2026-10-13-QGL-failure/` (+ `.zip`); email draft: `.../SV08Max-sovol-support-email-draft.html`.
+**Outcome (2026-10-13):** Sovol support confirmed they will ship a replacement eddy sensor and a PEI sheet. Keep the old sensor/cable in case Sovol wants it back.
+**After the new sensor is fitted:**
+- Redo eddy calibration per Sovol's replacement instructions (drive current + Z offset; Klipper commands are `LDC_CALIBRATE_DRIVE_CURRENT` / `PROBE_EDDY_CURRENT_CALIBRATE`, verify before use).
+- First Z home + QGL with a hand on the e-stop, then check `klippy.log` for any `ldc1612 i2c register` lines (there should be none) and sane probe values (a few mm near the bed, not hundreds).
+- Re-check first layer / Z offset (new PEI thickness may differ).
+- **Until then:** no unattended Z home or print start; pull `klippy.log` (it rotates at ~15 MB, roughly daily) before any restart if it fails again.
+- Upgrade-phase idea (not applied): a firmware guard that aborts when the probe reads absurd heights or Z homing travels too far without a trigger, so a dead sensor errors instead of crashing.
+
 ## Wi-Fi reconnect loop fix (2026-10-13)
 **Symptom:** Wi-Fi dropped and re-joined roughly every 13 s (`wpa_supplicant` `CTRL-EVENT-DISCONNECTED reason=3 locally_generated=1`), Mainsail kept disconnecting, and Moonraker's detected IP flipped between `.44`, `.48` and 169.254.x.x. Changing 5 GHz -> 2.4 GHz SSID made no difference; it is not a signal/antenna/AP problem.
 **Cause (a Sovol image bug, not RF):**
