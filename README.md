@@ -80,3 +80,10 @@ Replaces the stock Sovol buffer/feeder with a BIQU Panda feeder (single feeder, 
 - **Must disable the motion sensor** (`SET_FILAMENT_SENSOR SENSOR=encoder_sensor ENABLE=0`, re-enable after) in the feeder load/unload macros and Sovol LOAD_FILAMENT/UNLOAD_FILAMENT, and for any purge/prime with no filament flow, or it will pause mid-load.
 - Mount: **outside the enclosure, as close to the enclosure's filament inlet as possible** (SFS rated max 50 C). Design after the enclosure is installed. The tube run to the extruder adds slack, so expect a `detection_length` above the 3 mm default (start ~5-10 mm and tune in 1 mm steps).
 - Sequence after the Halloween print jobs: SSH hardening -> Panda feeder install -> SFS install. Do not modify the printer while the big jobs run.
+
+## Enclosure chamber heater (2026-11-22)
+- Enabled by uncommenting `[include chamber_hot.cfg]` (line 2 of `printer.cfg`), then `FIRMWARE_RESTART`. Done entirely over SSH/Moonraker; screen firmware >= 2.1.8 is only needed for the touchscreen's chamber button (Mainsail works regardless). Pre-change copies on the printer: `~/printer_data/backup/pre-chamber-20261122/`. Latest `printer.cfg` snapshot: `backup/2026-11-22/`.
+- Heater board `hot_mcu` (CAN UUID `58a72bb93aa4`, STM32F103, fw cc8afd8) is on the bus and matches the UUID in `chamber_hot.cfg`. Chamber thermistor read 23.5 C at idle (plausible). Heater: `heater_generic chamber_temp`, max_temp 65, watermark control; macros `M141`/`M191`.
+- Enclosure fans: `fan2` (mainboard PB0 = K-FAN1 header) and `fan3` (PE11 = K-FAN2 header). The factory `check_chamber` macro runs `fan2` at 80% while the chamber target is >0 and stops it 30 s after the target returns to 0; `fan3` is manual only.
+- **Known issue in Sovol's `chamber_hot.cfg`:** `check_chamber` calls `SAVE_VARIABLE` every second, rewriting `saved_variables.cfg` (which also holds power-loss-recovery data such as `power_resume_z`). A power cut mid-write could corrupt that file. Fix = only save when the target actually changes.
+- Not yet done: first live heating test (see chat).
