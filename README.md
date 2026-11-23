@@ -100,3 +100,7 @@ Replaces the stock Sovol buffer/feeder with a BIQU Panda feeder (single feeder, 
 - Tested without heat or motion: `DRYRUN=1` plan output, 20 s step timing, both report outcomes. **Not yet tested: a real heated print.**
 - Klipper gotchas learned: a macro cannot call itself (`Macro X called recursively`), so the soak is a fixed list of steps; `G4` only queues, `M400` is what makes a step really wait; no Jinja `{# #}` comments in macros.
 - zsh gotcha for future sessions: an unquoted `$VAR` holding several ssh options is NOT word-split in zsh; put the options inline.
+
+### Chamber heater off at layer 5 (2026-11-22)
+- Orca Printer settings > Machine G-code > Layer change G-code (needs Advanced mode) contains `{if layer_num == 5}` / `M141 S0` / `{endif}` so the chamber heater switches off after 5 layers for every print (cycling heater causes ridges; adhesion is fine by then). `layer_num` is zero-based, so this fires at the start of the 6th layer.
+- **Required companion fix:** Sovol's `check_chamber` used `G4 P30000` when the target hit 0, which stalls the toolhead 30 s if that happens mid-print. Replaced with a non-blocking `[delayed_gcode chamber_fan_off]` (30 s timer, cancelled if the target goes >0 again). Verified: fan2 stays on 30 s after `M141 S0`, then off, with gcode not blocked. Pre-fix copy: `~/printer_data/backup/pre-hotstart-20261122/chamber_hot.cfg.after-savefix`. Factory reset (`factory_resets.sh`) would restore the stalling version.
